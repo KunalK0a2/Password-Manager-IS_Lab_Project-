@@ -10,8 +10,7 @@ from flask_cors import CORS
 
 app = Flask(__name__, static_folder="static")
 
-# Change this in a real project.
-app.secret_key = os.environ.get("SECRET_KEY", "change-this-secret-key")
+app.secret_key = os.environ.get("SECRET_KEY", "abcdefg")
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(minutes=30)
 
 CORS(app, supports_credentials=True)
@@ -20,11 +19,9 @@ VAULT_FILE = "vault.json"
 
 
 # ----------------------------
-# Dependency-free crypto helper
+# crypto-helper class
 # ----------------------------
-# This avoids cryptography/argon2 install issues.
-# For a college project/demo, this works.
-# For production, use audited libraries like cryptography.
+
 class CryptoEngine:
     SALT_SIZE = 16
     NONCE_SIZE = 16
