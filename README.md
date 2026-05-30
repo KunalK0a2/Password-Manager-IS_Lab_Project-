@@ -3,7 +3,7 @@
 SecureLock is a secure password manager built using Flask and JavaScript that allows users to store, manage, and organize credentials in an encrypted vault.
 
 ## Live Demo
-https://your-render-app.onrender.com
+[SecureLock](https://securelock.onrender.com/)
 
 ## Features
 
