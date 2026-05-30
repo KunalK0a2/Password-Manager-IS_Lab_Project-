@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SecureLock Password Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/zxcvbn/4.4.2/zxcvbn.js"></script>
+    <style>
+        :root { 
+            --primary-color: #1e4533; 
+            --primary-hover: #1ed760; 
+            --card-bg: #181818;
+            --input-bg: #282828;
+            --body-bg: #121212;
+        }
+
+        body { 
+            font-family: 'Inter', sans-serif; 
+            background-color: var(--body-bg); 
+            color: white; 
+            opacity: 0;
+            animation: fadeIn 0.5s ease-out forwards;
+        }
+
+        @keyframes fadeIn { to { opacity: 1; } }
+
+        @keyframes popIn {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        @keyframes slideUpFadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .dark-card { 
+            background-color: var(--card-bg); 
+            animation: popIn 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+        }
+
+        .row-hover:hover { background-color: #2b2b2b; }
+
+        #list-container > div {
+            opacity: 0;
+            animation: slideUpFadeIn 0.4s ease-out forwards;
+        }
+
+        .form-input { 
+            background-color: var(--input-bg); 
+            border: 1px solid #444; 
+            border-radius: 8px; 
+            color: white; 
+            padding: 0.75rem; 
+            transition: all 0.2s ease-in-out;
+        }
+
+        .form-input:focus {
+            transform: scale(1.02);
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 2px var(--primary-color);
+            outline: none;
+        }
+
+        .action-btn, .btn-primary, .bg-gray-600, .bg-red-600 {
+            transition: all 0.2s ease;
+        }
+
+        .action-btn:active, .btn-primary:active, .bg-gray-600:active, .bg-red-600:active {
+            transform: scale(0.95);
+            filter: brightness(0.9);
+        }
+
+        .strength-bar-bg { background-color: #333; }
+        #strength-bar { 
+            height: 5px; 
+            width: 0%; 
+            border-radius: 5px; 
+            transition: width 0.4s ease, background-color 0.4s ease;
+        }
+
+        .category-header { 
+            background-color: #2a2a2a; 
+            position: sticky; 
+            top: -1px;
+            z-index: 10;
+        }
+
+        #details-modal, #generator-modal {
+            transition: opacity 0.3s ease;
+        }
+
+        #details-modal > div, #generator-modal > div {
+            animation: popIn 0.3s ease-out forwards;
+        }
+
+        .save-success {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+
+        .save-success i {
+            animation: tickPop 0.35s ease-out both;
+        }
+
+        @keyframes tickPop {
+            from { transform: scale(0.3); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+    </style>
+</head>
+<body class="p-6 sm:p-10">
+    <div class="max-w-4xl mx-auto">
+        <header class="flex justify-between items-center mb-10">
+            <div>
+                <h1 class="text-4xl font-bold text-white flex items-center gap-3"><i class="fas fa-lock text-green-500"></i> SecureLock</h1>
+                <p class="text-gray-400">Your Encrypted Vault</p>
+            </div>
+            <button id="logout-btn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg"><i class="fas fa-sign-out-alt mr-2"></i>Logout</button>
+        </header>
+
+        <div class="dark-card p-6 mb-8 shadow-lg rounded-xl">
+            <h2 class="text-2xl font-semibold mb-4">Add New Credential</h2>
+            <form id="add-form" class="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+                <input id="title" placeholder="Website or App Name" required class="form-input w-full" />
+                <input id="url" type="url" placeholder="Website URL (e.g., https://google.com)" class="form-input w-full" />
+                <input id="username" type="email" placeholder="Username / Email" required class="form-input w-full" />
+                <div class="relative">
+                    <input id="password" type="password" placeholder="Password" required class="form-input w-full pr-20" />
+                    <button type="button" id="toggle-password-btn" class="absolute top-0 right-10 h-full px-3 text-gray-400 hover:text-green-400" title="Show/Hide Password"><i id="toggle-password-icon" class="fas fa-eye-slash"></i></button>
+                    <button type="button" onclick="openGeneratorModal()" class="absolute top-0 right-0 h-full px-3 text-gray-400 hover:text-green-400" title="Generate Secure Password"><i class="fas fa-magic"></i></button>
+                </div>
+                <div class="md:col-span-2"><input id="category" placeholder="Category (e.g., Work, Social)" class="form-input w-full" /></div>
+                <div class="md:col-span-2">
+                    <div class="w-full strength-bar-bg rounded-full h-1.5"><div id="strength-bar"></div></div>
+                    <p id="strength-text" class="text-xs text-gray-400 text-center mt-2"></p>
+                </div>
+                <button id="save-credential-btn" type="submit" class="md:col-span-2 mt-2 bg-[var(--primary-color)] hover:bg-[var(--primary-hover)] text-black font-bold py-2 rounded-lg">
+                    <i class="fas fa-save mr-2"></i>Save Credential
+                </button>
+            </form>
+        </div>
+
+        <div class="dark-card p-6 shadow-lg rounded-xl">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-2xl font-semibold">Your Saved Credentials</h2>
+                <input id="search-input" placeholder="Search..." class="form-input w-48 sm:w-64" oninput="filterPasswords()" />
+            </div>
+            <div id="list-container" class="divide-y divide-gray-700 max-h-[60vh] overflow-y-auto"></div>
+            <div id="empty-state" class="text-center text-gray-500 py-10 hidden"><i class="fas fa-box-open text-4xl mb-2"></i><p>No passwords saved yet.</p></div>
+            <div id="loading-state" class="text-center text-gray-400 py-10"><i class="fas fa-spinner fa-spin text-3xl"></i></div>
+        </div>
+    </div>
+
+    <div id="details-modal" class="hidden fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
+        <div class="dark-card p-6 rounded-xl max-w-sm w-full mx-3">
+          <h3 class="text-xl font-bold mb-4">Edit Credential</h3>
+          <form id="edit-form" class="flex flex-col gap-3">
+            <input id="edit-title" class="form-input" required />
+            <input id="edit-url" type="url" class="form-input" />
+            <input id="edit-username" type="email" class="form-input" required />
+            <input id="edit-password" class="form-input" required />
+            <input id="edit-category" class="form-input" />
+            <div class="flex justify-end gap-3 mt-2">
+              <button type="button" onclick="closeModal()" class="bg-gray-600 hover:bg-gray-700 px-4 py-2 rounded-lg">Cancel</button>
+              <button type="submit" class="bg-[var(--primary-color)] hover:bg-[var(--primary-hover)] text-black font-bold px-4 py-2 rounded-lg">Save</button>
+            </div>
+          </form>
+        </div>
+    </div>
+
+    <div id="generator-modal" class="hidden fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
+        <div class="dark-card p-6 rounded-xl max-w-sm w-full mx-3">
+            <h3 class="text-xl font-bold mb-4">Password Generator</h3>
+            <div class="space-y-4">
+                <div><label for="length" class="block text-sm font-medium text-gray-300">Length: <span id="length-val">20</span></label><input id="length" type="range" min="8" max="64" value="20" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer"></div>
+                <div class="flex items-center"><input id="uppercase" type="checkbox" checked class="h-4 w-4 rounded"><label for="uppercase" class="ml-3 block text-sm">Uppercase (A-Z)</label></div>
+                <div class="flex items-center"><input id="numbers" type="checkbox" checked class="h-4 w-4 rounded"><label for="numbers" class="ml-3 block text-sm">Numbers (0-9)</label></div>
+                <div class="flex items-center"><input id="symbols" type="checkbox" checked class="h-4 w-4 rounded"><label for="symbols" class="ml-3 block text-sm">Symbols (!@#$)</label></div>
+                <div class="flex justify-end gap-3 mt-4">
+                    <button type="button" onclick="closeGeneratorModal()" class="bg-gray-600 hover:bg-gray-700 px-4 py-2 rounded-lg">Cancel</button>
+                    <button type="button" onclick="generateAndSetPassword()" class="bg-[var(--primary-color)] hover:bg-[var(--primary-hover)] text-black font-bold px-4 py-2 rounded-lg">Generate & Use</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const listContainer = document.getElementById('list-container');
+        const emptyState = document.getElementById('empty-state');
+        const loadingState = document.getElementById('loading-state');
+        const addForm = document.getElementById('add-form');
+        const passwordInput = document.getElementById('password');
+        const strengthBar = document.getElementById('strength-bar');
+        const strengthText = document.getElementById('strength-text');
+        const togglePasswordBtn = document.getElementById('toggle-password-btn');
+        const detailsModal = document.getElementById('details-modal');
+        const editForm = document.getElementById('edit-form');
+        const generatorModal = document.getElementById('generator-modal');
+        const lengthSlider = document.getElementById('length');
+        const lengthVal = document.getElementById('length-val');
+        const saveCredentialBtn = document.getElementById('save-credential-btn');
+
+        let allEntries = [];
+        let currentEditTitle = null;
+        let clipboardClearTimer = null;
+
+        async function fetchPasswords() {
+            loadingState.classList.remove('hidden'); emptyState.classList.add('hidden');
+            try {
+                const response = await fetch('/api/passwords');
+                const entries = await response.json();
+                allEntries = entries;
+                renderList(allEntries);
+            } catch (error) { console.error("Failed to fetch passwords:", error); } 
+            finally { loadingState.classList.add('hidden'); }
+        }
+
+        function renderList(entries) {
+            listContainer.innerHTML = "";
+            emptyState.classList.toggle('hidden', entries.length > 0);
+            let currentCategory = null;
+
+            entries.forEach(entry => {
+                if (entry.category !== currentCategory) {
+                    currentCategory = entry.category;
+                    const header = document.createElement('div');
+                    header.className = 'category-header p-2 text-sm font-bold text-gray-400 sticky top-0';
+                    header.textContent = currentCategory || 'Uncategorized';
+                    listContainer.appendChild(header);
+                }
+
+                const row = document.createElement("div");
+                row.className = "flex justify-between items-center py-4 px-2 row-hover rounded-md transition";
+                row.dataset.title = entry.title;
+                row.innerHTML = `<div class="flex-grow flex items-center gap-4 cursor-pointer" data-action="view"><img src="https://www.google.com/s2/favicons?sz=64&domain_url=${encodeURIComponent(entry.url || entry.title)}" class="w-8 h-8 rounded-md"><div><p class="font-semibold text-lg">${entry.title}</p><div class="hidden details-view mt-2 text-sm text-gray-300 space-y-1"><div class="flex items-center gap-2"><span class="username-field"></span><button class="action-btn text-gray-400 hover:text-green-500" data-action="copy-user" title="Copy Username"><i class="fas fa-copy"></i></button></div><div class="flex items-center gap-2"><span class="font-mono password-field" data-password="">••••••••</span><button class="action-btn text-gray-400 hover:text-green-500" data-action="toggle-pass" title="Show/Hide Password"><i class="fas fa-eye"></i></button><button class="action-btn text-gray-400 hover:text-green-500" data-action="copy-pass" title="Copy Password"><i class="fas fa-copy"></i></button></div></div></div></div><div class="flex items-center gap-3">${entry.url ? `<a href="${entry.url}" target="_blank" class="action-btn text-gray-400 hover:text-blue-500" title="Launch Website"><i class="fas fa-external-link-alt"></i></a>` : ''}<button class="action-btn text-gray-400 hover:text-yellow-500" data-action="edit" title="Edit"><i class="fas fa-pen"></i></button><button class="action-btn text-red-500 hover:text-red-400" data-action="delete" title="Delete"><i class="fas fa-trash"></i></button></div>`;
+                listContainer.appendChild(row);
+            });
+        }
+
+        function showSaveTick() {
+            const originalHTML = '<i class="fas fa-save mr-2"></i>Save Credential';
+            saveCredentialBtn.innerHTML = '<span class="save-success"><i class="fas fa-check-circle"></i>Saved</span>';
+            saveCredentialBtn.classList.add('bg-green-500');
+            saveCredentialBtn.classList.remove('bg-[var(--primary-color)]');
+
+            setTimeout(() => {
+                saveCredentialBtn.innerHTML = originalHTML;
+                saveCredentialBtn.classList.remove('bg-green-500');
+                saveCredentialBtn.classList.add('bg-[var(--primary-color)]');
+            }, 1200);
+        }
+
+        async function handleAddCredential(e) {
+            e.preventDefault();
+            const title = document.getElementById('title').value.trim();
+            const username = document.getElementById('username').value.trim();
+            const password = passwordInput.value.trim();
+            const url = document.getElementById('url').value.trim();
+            const category = document.getElementById('category').value.trim();
+
+            if (!title || !username || !password) return;
+
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(username)) { alert("Please enter a valid email address."); return; }
+
+            const strength = zxcvbn(password);
+            if (strength.score < 2) { alert(`Password is too weak. ${strength.feedback.warning || ''}`); return; }
+
+            try {
+                const response = await fetch('/api/passwords', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title, username, password, url, category }),
+                });
+
+                if (!response.ok) {
+                    alert("An error occurred while saving.");
+                    return;
+                }
+
+                showSaveTick();
+                addForm.reset();
+                updatePasswordStrength();
+                fetchPasswords();
+            } catch (error) {
+                alert("An error occurred while saving.");
+            }
+        }
+
+        async function handleListClick(e) {
+            const button = e.target.closest('button[data-action]');
+            const viewTarget = e.target.closest('[data-action="view"]');
+
+            if (button) {
+                const action = button.dataset.action;
+                const row = button.closest('[data-title]');
+                const title = row.dataset.title;
+
+                if (action === 'edit') await openEditModal(title);
+                if (action === 'delete') await handleDelete(title);
+
+                if (action === 'toggle-pass') {
+                    const passwordField = row.querySelector('.password-field');
+                    const icon = button.querySelector('i');
+                    const isHidden = passwordField.textContent === '••••••••';
+                    passwordField.textContent = isHidden ? passwordField.dataset.password : '••••••••';
+                    icon.classList.toggle('fa-eye', !isHidden);
+                    icon.classList.toggle('fa-eye-slash', isHidden);
+                }
+
+                if (action === 'copy-user' || action === 'copy-pass') {
+                    const details = await getDetails(title);
+                    const textToCopy = action === 'copy-user' ? details.username : details.password;
+                    await handleCopy(textToCopy, button);
+                }
+            } else if (viewTarget) {
+                await handleViewDetails(viewTarget);
+            }
+        }
+
+        async function handleCopy(text, button) {
+            try {
+                await navigator.clipboard.writeText(text);
+                const original = button.innerHTML;
+                button.innerHTML = `<i class="fas fa-check text-green-500"></i>`;
+
+                if (clipboardClearTimer) clearTimeout(clipboardClearTimer);
+                clipboardClearTimer = setTimeout(() => {
+                    navigator.clipboard.writeText('').catch(() => {});
+                }, 30000);
+
+                setTimeout(() => { button.innerHTML = original; }, 2000);
+            } catch (err) {
+                alert('Failed to copy.');
+            }
+        }
+
+        window.openGeneratorModal = function() { generatorModal.classList.remove('hidden'); }
+        window.closeGeneratorModal = function() { generatorModal.classList.add('hidden'); }
+
+        window.generateAndSetPassword = function() {
+            const length = document.getElementById('length').value;
+            const useUppercase = document.getElementById('uppercase').checked;
+            const useNumbers = document.getElementById('numbers').checked;
+            const useSymbols = document.getElementById('symbols').checked;
+
+            let chars = "abcdefghijklmnopqrstuvwxyz";
+            if (useUppercase) chars += "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+            if (useNumbers) chars += "0123456789";
+            if (useSymbols) chars += "!@#$%^&*()_+-=[]{}|;:,.<>?";
+
+            let pass = "";
+            for (let i = 0; i < length; i++) pass += chars[Math.floor(Math.random() * chars.length)];
+
+            passwordInput.value = pass;
+            updatePasswordStrength();
+            closeGeneratorModal();
+        }
+
+        async function openEditModal(title) {
+            const details = await getDetails(title);
+            if (!details) return;
+
+            document.getElementById('edit-title').value = details.title;
+            document.getElementById('edit-url').value = details.url || '';
+            document.getElementById('edit-username').value = details.username;
+            document.getElementById('edit-password').value = details.password;
+            document.getElementById('edit-category').value = details.category || '';
+            currentEditTitle = details.title;
+            detailsModal.classList.remove('hidden');
+        }
+
+        async function handleEditSubmit(e) {
+            e.preventDefault();
+
+            const updated = {
+                title: document.getElementById('edit-title').value,
+                url: document.getElementById('edit-url').value,
+                username: document.getElementById('edit-username').value,
+                password: document.getElementById('edit-password').value,
+                category: document.getElementById('edit-category').value,
+            };
+
+            await fetch(`/api/passwords/${encodeURIComponent(currentEditTitle)}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(updated)
+            });
+
+            closeModal();
+            fetchPasswords();
+        }
+
+        window.closeModal = function() {
+            detailsModal.classList.add("hidden");
+            currentEditTitle = null;
+        };
+
+        async function handleDelete(title) {
+            if (!confirm(`Delete "${title}"?`)) return;
+            await fetch(`/api/passwords/${encodeURIComponent(title)}`, { method: "DELETE" });
+            fetchPasswords();
+        }
+
+        async function handleLogout() {
+            await fetch("/api/logout", { method: "POST" });
+            window.location.href = "/";
+        }
+
+        function togglePasswordVisibility() {
+            const icon = document.getElementById("toggle-password-icon");
+            if (passwordInput.type === "password") {
+                passwordInput.type = "text";
+                icon.classList.remove("fa-eye-slash");
+                icon.classList.add("fa-eye");
+            } else {
+                passwordInput.type = "password";
+                icon.classList.remove("fa-eye");
+                icon.classList.add("fa-eye-slash");
+            }
+        }
+
+        function updatePasswordStrength() {
+            const e = passwordInput.value;
+            if (!e) {
+                strengthBar.style.width = "0%";
+                strengthText.textContent = "";
+                return;
+            }
+
+            const t = zxcvbn(e);
+            const s = t.score;
+            let a = (s / 4) * 100, n = "", o = "";
+
+            switch (s) {
+                case 0: n = "bg-red-500"; o = "Very Weak"; break;
+                case 1: n = "bg-orange-500"; o = "Weak"; break;
+                case 2: n = "bg-yellow-500"; o = "Moderate"; break;
+                case 3: n = "bg-blue-500"; o = "Strong"; break;
+                case 4: n = "bg-green-500"; o = "Very Strong"; break;
+            }
+
+            strengthBar.style.width = a + "%";
+            strengthBar.className = `h-1.5 rounded-full ${n}`;
+            strengthText.textContent = `Strength: ${o}`;
+        }
+
+        window.filterPasswords = function() {
+            const e = document.getElementById("search-input").value.toLowerCase();
+            const t = allEntries.filter(t => Object.values(t).join(" ").toLowerCase().includes(e));
+            renderList(t);
+        };
+
+        async function checkAuthentication() {
+            try {
+                const response = await fetch("/api/check-auth");
+                if (!response.ok) window.location.href = "/";
+            } catch (error) {
+                console.error("Auth check failed:", error);
+                window.location.href = "/";
+            }
+        }
+
+        async function getDetails(t) {
+            return await (await fetch(`/api/passwords/${encodeURIComponent(t)}`)).json();
+        }
+
+        async function handleViewDetails(t) {
+            const e = t.querySelector(".details-view");
+            const s = e.classList.contains("hidden");
+
+            if (s) {
+                const a = t.closest("[data-title]").dataset.title;
+                const n = await getDetails(a);
+
+                if (n.username && n.password) {
+                    const o = t.querySelector(".password-field");
+                    o.dataset.password = n.password;
+                    o.textContent = "••••••••";
+                    t.querySelector(".username-field").textContent = `Username: ${n.username}`;
+                    e.classList.remove("hidden");
+                }
+            } else {
+                e.classList.add("hidden");
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            checkAuthentication();
+            fetchPasswords();
+        });
+
+        addForm.addEventListener('submit', handleAddCredential);
+        passwordInput.addEventListener('input', updatePasswordStrength);
+        listContainer.addEventListener('click', handleListClick);
+        document.getElementById('logout-btn').addEventListener('click', handleLogout);
+        togglePasswordBtn.addEventListener('click', togglePasswordVisibility);
+        editForm.addEventListener('submit', handleEditSubmit);
+        lengthSlider.addEventListener('input', (e) => lengthVal.textContent = e.target.value);
+    </script>
+</body>
+</html>
